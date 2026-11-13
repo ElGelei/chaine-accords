@@ -1,0 +1,31 @@
+name: Rendu quotidien
+on:
+  schedule:
+    - cron: '0 6 * * *'   # tous les jours à 7 h, heure de Paris
+  workflow_dispatch:       # bouton pour lancer à la main
+defaults:
+  run:
+    working-directory: chaine-accords
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Outils
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Dépendances
+        run: npm install && npx playwright install --with-deps chromium
+      - name: Rendu de la vidéo du jour
+        run: node render/render.mjs
+      - name: Vidéo disponible en téléchargement
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-du-jour
+          path: |
+            chaine-accords/out/*.mp4
+            chaine-accords/out/*.json
+          retention-days: 14
