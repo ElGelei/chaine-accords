@@ -1,5 +1,5 @@
 {
-  "langue": "fr",
+  "langue": "en",
   "plateformes": [
     "youtube",
     "instagram",
@@ -19,6 +19,8 @@
     "#piano",
     "#relaxingmusic",
     "#pixelart",
-    "#musictheory"
+    "#musictheory",
+    "#lofi",
+    "#calm"
   ]
 }

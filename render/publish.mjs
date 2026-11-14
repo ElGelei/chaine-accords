@@ -30,7 +30,7 @@ async function youtube() {
     client_id: env.YT_CLIENT_ID, client_secret: env.YT_CLIENT_SECRET, refresh_token: env.YT_REFRESH_TOKEN, grant_type: 'refresh_token' }) });
   const bytes = await readFile(VIDEO);
   const metaBody = JSON.stringify({
-    snippet: { title: cap.youtubeTitle, description: cap.text, categoryId: '10', tags: ['piano', 'chords', 'relaxing', 'pixel art'] },
+    snippet: { title: cap.youtubeTitle, description: cap.text, categoryId: '10', tags: ['piano', 'chords', 'chord progression', 'relaxing music', 'calm', 'pixel art', 'music theory', 'lofi', 'sleep music', 'study music'] },
     status: { privacyStatus: 'public', selfDeclaredMadeForKids: false }
   });
   const { r } = await req('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
