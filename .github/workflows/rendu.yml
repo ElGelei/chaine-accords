@@ -1,7 +1,13 @@
 name: Publication quotidienne
 on:
+  # GitHub may delay or drop a scheduled run: several attempts per evening,
+  # the guard below makes sure only the first one actually publishes.
   schedule:
-    - cron: '30 16 * * *'   # every day 17:30 Paris (winter time)
+    - cron: '17 16 * * *'   # 17:17 Paris (winter time)
+    - cron: '47 16 * * *'   # 17:47
+    - cron: '23 17 * * *'   # 18:23
+    - cron: '53 17 * * *'   # 18:53
+    - cron: '37 18 * * *'   # 19:37
   workflow_dispatch:
     inputs:
       publier:
@@ -12,13 +18,34 @@ permissions:
   contents: write
 concurrency: quotidien
 jobs:
+  garde:
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.check.outputs.go }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+      - id: check
+        run: |
+          TODAY=$(TZ=Europe/Paris date +%F)
+          if [ "${{ github.event_name }}" = "schedule" ] && jq -e --arg d "$TODAY" 'any(.[]; .date == $d)' state/historique.json >/dev/null; then
+            echo "Déjà publié aujourd'hui ($TODAY) : rien à faire."; echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+
   quotidien:
+    needs: garde
+    if: needs.garde.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
       PUBLISH: ${{ (github.event_name == 'schedule' || inputs.publier) && '1' || '0' }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: main
       - uses: actions/setup-node@v5
         with:
           node-version: 22
