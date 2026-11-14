@@ -17,11 +17,13 @@ await mkdir(OUT, { recursive: true });
 
 const history = JSON.parse(await readFile('state/historique.json', 'utf8').catch(() => '[]'));
 const recent = new Set(history.slice(-90).map(h => h.signature));
+const recentThemes = history.slice(-3).map(h => h.theme).filter(x => x !== undefined).join(',');
+const recentOutfits = history.slice(-2).map(h => h.outfit).filter(x => x !== undefined).join(',');
 const signature = m => `${m.mode}|${m.chords.map(c => c.degree).join('-')}|${m.spice}`;
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
-const engine = s => pathToFileURL(path.resolve('engine/engine.html')).href + `?render=1&seed=${encodeURIComponent(s)}`;
+const engine = s => pathToFileURL(path.resolve('engine/engine.html')).href + `?render=1&seed=${encodeURIComponent(s)}&avoid=${recentThemes}&avoidOutfit=${recentOutfits}`;
 
 let seed, meta;
 for (let k = 1; k <= 25; k++) {
@@ -33,7 +35,7 @@ for (let k = 1; k <= 25; k++) {
   console.log(`  ${seed} : suite déjà publiée récemment, on en tire une autre`);
 }
 meta.signature = signature(meta);
-console.log(`▶ ${seed} · ${meta.key} · ${meta.chords.map(c => c.name).join(' ')} · ${meta.duration.toFixed(1)} s`);
+console.log(`▶ ${seed} · ${meta.key} · ${meta.chords.map(c => c.name).join(' ')} · ${meta.duration.toFixed(1)} s · ${meta.theme} · ${meta.outfitName}`);
 
 const wav = path.join(OUT, 'video.wav'), mp4 = path.join(OUT, 'video.mp4');
 await writeFile(wav, Buffer.from(await page.evaluate('window.__renderAudio()'), 'base64'));
@@ -41,7 +43,7 @@ await writeFile(wav, Buffer.from(await page.evaluate('window.__renderAudio()'), 
 const total = Math.ceil((meta.duration + 1.5) * FPS);
 const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error',
   '-f', 'image2pipe', '-framerate', String(FPS), '-i', '-', '-i', wav,
-  '-c:v', 'libx264', '-preset', 'slow', '-crf', '26', '-pix_fmt', 'yuv420p',
+  '-c:v', 'libx264', '-preset', 'slow', '-crf', '26', '-maxrate', '600k', '-bufsize', '1200k', '-pix_fmt', 'yuv420p',
   '-c:a', 'aac', '-b:a', '128k', '-shortest', '-movflags', '+faststart', mp4],
   { stdio: ['pipe', 'inherit', 'inherit'] });
 const done = new Promise((res, rej) => ff.on('close', c => c === 0 ? res() : rej(new Error('ffmpeg a échoué (' + c + ')'))));

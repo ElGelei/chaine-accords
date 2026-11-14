@@ -103,8 +103,38 @@ const THEMES=[
   far:{c:'#c48450',base:108,amp:5,f:.06,p:.12},
   mid:{type:'wheat',c:'#d29d3e',cap:'#f2cc6a',base:118,p:.6},
   ground:{top:'#b98a52',fill:'#9a7044',deco:['#6f8a3a','#e8655a'],kind:'tuft'},
-  weather:'seeds', burst:['#e8655a','#fff3cf','#f6b04a']}
+  weather:'seeds', burst:['#e8655a','#fff3cf','#f6b04a']},
+ {name:'Ville sous la pluie', hz:104,
+  sky:['#0d0f24','#16183a','#22214d','#2f2a5c','#3b3466'],
+  far:{c:'#1a1a38',base:104,amp:3,f:.08,p:.08},
+  mid:{type:'city',c:'#120f26',win:['#ffd27a','#ffb86b','#9fd0ff'],base:128,p:.35},
+  ground:{top:'#3a3860',fill:'#1c1a33',deco:['#ffd27a','#9fd0ff','#5a5890'],kind:'puddle'},
+  weather:'rain', burst:['#ffd27a','#9fd0ff','#ffffff']},
+ {name:'Forêt d’automne', hz:110,
+  sky:['#3b2a4f','#6a3b5a','#a85a52','#d9845a','#f0b070'],
+  sun:{x:66,y:102,r:8,c:'#ffd9a0'},
+  far:{c:'#5a3550',base:110,amp:6,f:.06,p:.12},
+  mid:{type:'round',c:'#3a2018',cols:['#a8432e','#c9652c','#d99a2b','#7a2e2a'],base:126,p:.35},
+  ground:{top:'#7a4a2a',fill:'#3d2a1c',deco:['#d9652c','#e8a23a','#a8432e'],kind:'tuft'},
+  weather:'leaves', burst:['#e8a23a','#d9652c','#fff0d0']},
+ {name:'Printemps en fleurs', hz:110,
+  sky:['#7fb0e0','#9cc4ea','#bcd8f0','#dcebf6'],
+  sun:{x:22,y:30,r:7,c:'#fff8dc'},
+  far:{c:'#9db8a0',base:110,amp:6,f:.05,p:.1},
+  mid:{type:'round',c:'#6b4a3a',cols:['#f4a7c0','#f7c3d4','#ec8fb0'],base:126,p:.35},
+  ground:{top:'#8cc070',fill:'#5f9a4f',deco:['#ffffff','#f7c3d4','#ffe08a'],kind:'flower'},
+  weather:'petals', burst:['#f7c3d4','#ffffff','#ffe08a']},
+ {name:'Aurore boréale', hz:108,
+  sky:['#050a1a','#081428','#0c1f36','#123048','#1a4256'], stars:true, aurora:true,
+  far:{c:'#08151f',base:108,amp:12,f:.05,p:.1,cap:'#9fb6c4'},
+  mid:{type:'pine',c:'#24525f',cap:'#e4eef4',base:128,p:.4},
+  ground:{top:'#dfe9f0',fill:'#b9cbd8',deco:['#8aa0b4'],kind:'stone'},
+  weather:'snowlight', burst:['#9effc8','#7fd8ff','#ffffff']}
 ];
+/* Ambiance sonore discrète associée à chaque décor (sous la musique) */
+const AMB=['crickets','waves','wind','breeze','rain','wind','breeze','wind'];
+/* Décors compatibles avec chaque mode */
+const THEMES_FOR={maj:[0,1,3,5,6,7,4], min:[2,4,7,1,5]};
 
 let themeIdx=0, staticLayer=null;
 function buildStatic(th){
@@ -124,8 +154,16 @@ function buildStatic(th){
 }
 
 /* ---------- Petite fille (héroïne originale, profil droit, 18×21) ---------- */
-const SPAL={v:'#7a5cc8',V:'#ab8ef0',u:'#4b3787',n:'#2c2a3a',p:'#f4c64e',P:'#c48f26',s:'#ffe0c2',S:'#ecb08a',e:'#221c30',c:'#ff9a8c',j:'#f6efe0',J:'#cfc0a2',k:'#2f8f8a',K:'#1d625f',l:'#3a3048',b:'#8a5232',B:'#5e3420'};
+const BASE_SPAL={v:'#7a5cc8',V:'#ab8ef0',u:'#4b3787',n:'#2c2a3a',p:'#f4c64e',P:'#c48f26',s:'#ffe0c2',S:'#ecb08a',e:'#221c30',c:'#ff9a8c',j:'#f6efe0',J:'#cfc0a2',k:'#2f8f8a',K:'#1d625f',l:'#3a3048',b:'#8a5232',B:'#5e3420'};
 const SOUT='#221a2c';
+const OUTFITS=[
+  {name:'Crème & sarcelle'},
+  {name:'Pull rouge',       j:'#e86a6a',J:'#b84a52',k:'#3d4f7a',K:'#29365a'},
+  {name:'Moutarde',         j:'#f2c94c',J:'#c99a2e',k:'#7a4a32',K:'#5a3424',p:'#f6f3ec',P:'#c9c2b4'},
+  {name:'Menthe & prune',   j:'#9fd8c0',J:'#6fb09a',k:'#4a3a6a',K:'#33284d'},
+  {name:'Marine & rose',    j:'#3e4a6a',J:'#2b3450',k:'#c9a86a',K:'#a0844e',p:'#ff8fa3',P:'#c9667a'}
+];
+let SPAL=Object.assign({},BASE_SPAL), outfitIdx=0;
 const SFRAMES=[["..uvVu............", ".uvVVvu..vvvvv....", ".uvvvvu.vVVnvvvv..", "..uuuvvvVVvnvvvvv.", "....vvVVvvvnvvvvvv", "...vvVvvvvvnvvvvvv", "...vvvvvvvpppvvvvv", "...uvvvvvpPPpvsvvs", "...uvvvvvpPPpssess", "...uuvvvvpPPpssess", "....uvvvvvppssscs.", "....uuvvvvussssss.", "......uuuuuSSSs...", ".......jjjjjjj....", ".....sjjjjjjjjj...", ".....sJjjjjjjjJ...", "......kkkkkkkkk...", ".....KkkkkkkkkkK..", "......ll....ll....", ".....ll......ll...", "....Bbb.....Bbb..."], ["..uvVu............", ".uvVVvu..vvvvv....", ".uvvvvu.vVVnvvvv..", "..uuuvvvVVvnvvvvv.", "....vvVVvvvnvvvvvv", "...vvVvvvvvnvvvvvv", "...vvvvvvvpppvvvvv", "...uvvvvvpPPpvsvvs", "...uvvvvvpPPpssess", "...uuvvvvpPPpssess", "....uvvvvvppssscs.", "....uuvvvvussssss.", "......uuuuuSSSs...", ".......jjjjjjj....", "......jjjjjjjjj...", "......JjjjjjjjJ...", "......kkkkkkkkk...", ".....KkkkkkkkkkK..", "........lll.......", "........lll.......", "........Bbbb......"], ["..uvVu............", ".uvVVvu..vvvvv....", ".uvvvvu.vVVnvvvv..", "..uuuvvvVVvnvvvvv.", "....vvVVvvvnvvvvvv", "...vvVvvvvvnvvvvvv", "...vvvvvvvpppvvvvv", "...uvvvvvpPPpvsvvs", "...uvvvvvpPPpssess", "...uuvvvvpPPpssess", "....uvvvvvppssscs.", "....uuvvvvussssss.", "......uuuuuSSSs...", ".......jjjjjjj....", "......jjjjjjjjjs..", "......JjjjjjjjJs..", "......kkkkkkkkk...", ".....KkkkkkkkkkK..", ".......ll...ll....", "......ll.....ll...", ".....Bbb.....Bbb.."], ["..uvVu............", ".uvVVvu..vvvvv....", ".uvvvvu.vVVnvvvv..", "..uuuvvvVVvnvvvvv.", "....vvVVvvvnvvvvvv", "...vvVvvvvvnvvvvvv", "...vvvvvvvpppvvvvv", "...uvvvvvpPPpvsvvs", "...uvvvvvpPPpssess", "...uuvvvvpPPpssess", "....uvvvvvppssscs.", "....uuvvvvussssss.", "......uuuuuSSSs...", ".......jjjjjjj....", "......jjjjjjjjj...", "......JjjjjjjjJ...", "......kkkkkkkkk...", ".....KkkkkkkkkkK..", "........lll.......", "........lll.......", "........Bbbb......"]];
 function bakeFrame(rows){
   const w=rows[0].length+2, h=rows.length+2, c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d');
@@ -138,7 +176,8 @@ function bakeFrame(rows){
   }
   return c;
 }
-const FRAMES=SFRAMES.map((rows,i)=>({img:bakeFrame(rows),bob:i%2?-1:0}));
+let FRAMES=SFRAMES.map((rows,i)=>({img:bakeFrame(rows),bob:i%2?-1:0}));
+function setOutfit(i){ outfitIdx=i; SPAL=Object.assign({},BASE_SPAL,OUTFITS[i]); FRAMES=SFRAMES.map((rows,k)=>({img:bakeFrame(rows),bob:k%2?-1:0})); }
 const SPR_W=20, SPR_H=23;
 function drawGirl(x,y,f){ ctx.drawImage(FRAMES[f].img,x,y); }
 
@@ -283,7 +322,7 @@ const PRESETS={
   p5:{label:'Emprunt (iv)',mode:'maj',seq:['I','IV','iv','I','V','I']},
   p6:{label:'Mineur',mode:'min',seq:['i','iv','VII','III','VI','V7','i']}
 };
-const SPICE_LABEL={sec:'dominante secondaire',iv:'accord emprunté (iv)',dec:'cadence rompue',sus:'retard (sus4)'};
+const SPICE_LABEL={sec:'dominante secondaire',iv:'accord emprunté (iv)',dec:'cadence rompue',sus:'retard (sus4)',plag:'cadence plagale'};
 let spiceUsed='', genMode='maj';
 const dist5=(a,b)=>((a-b)%12+12)%12;
 function bassScore(prevR,r){ const d=dist5(prevR,r); return d===7?4:(d===3||d===4)?3:(d===10||d===11)?1:0.4; }
@@ -302,13 +341,14 @@ function buildRule(mode){
   /* une seule épice, pas toujours */
   spiceUsed='';
   if(Math.random()<0.7){
-    const opts=['sec','dec','sus']; if(mode==='maj' && n===6) opts.push('iv','iv');
+    const opts=['sec','sec','dec','sus','plag']; if(mode==='maj' && n===6) opts.push('iv','iv');
     const sp=pick(opts);
-    if(sp==='sec'){ const ts=[]; for(let i=2;i<seq.length-2;i++) if(D[seq[i]].f<2 && seq[i]!==TONIC[mode]) ts.push(i);
+    if(sp==='sec'){ const ts=[]; for(let i=2;i<seq.length-1;i++) if(seq[i]!==TONIC[mode] && !seq[i-1].startsWith('sec:') && (D[seq[i]].f<2 || i===seq.length-2)) ts.push(i);
       if(ts.length){ const t=pick(ts); seq[t-1]='sec:'+seq[t]; spiceUsed='sec'; } }
     else if(sp==='iv'){ seq.splice(1,3,'IV','iv',TONIC[mode]); spiceUsed='iv'; }
     else if(sp==='dec'){ const V=seq[seq.length-2]; seq.splice(seq.length-1,1,TS[mode][0],PDS[mode][1],'V7',TONIC[mode]); spiceUsed='dec'; }
     else if(sp==='sus'){ seq.splice(seq.length-2,1,'Vsus','V7'); spiceUsed='sus'; }
+    else if(sp==='plag'){ seq.push(PDS[mode][0],TONIC[mode]); spiceUsed='plag'; }
   }
   return seq;
 }
@@ -323,7 +363,7 @@ function realize(mode,toks){
   SPELL=(mode==='maj'?[2,7]:[4]).includes(tonic)?SH:FL;
   keyLabel=SPELL[tonic]+(mode==='maj'?' majeur':' mineur');
   const specs=toks.map(t=>specOf(mode,t));
-  const BASE=2.3, all=specs.length<=6?specs.concat(specs.slice(1)):specs; /* deux passages ; le I final du 1er sert de I initial du 2e */
+  const BASE=2.15+Math.random()*0.35, all=specs.length<=6?specs.concat(specs.slice(1)):specs; /* deux passages ; le I final du 1er sert de I initial du 2e */
   let prev=null, prevSpec=null, t=0; const seq=[];
   all.forEach((sp,i)=>{
     const last=i===all.length-1, endOfPass=i===specs.length-1;
@@ -349,7 +389,7 @@ function realize(mode,toks){
   MEAN=[0,1,2,3,4].map(v=>SEQ.reduce((a,c)=>a+c.notes[v],0)/N);
   songStart=tAll; lastIdx=-1;
   renderProg(); updateInfo();
-  const th=mode==='maj'?pick([0,1,3]):2; if(th!==themeIdx && !fade) fade={t:0,switched:false,to:th};
+  const th=pick(THEMES_FOR[mode]); if(th!==themeIdx && !fade) fade={t:0,switched:false,to:th};
 }
 function generateRule(mode){ realize(mode,buildRule(mode)); }
 function playPreset(k){ spiceUsed=''; realize(PRESETS[k].mode,PRESETS[k].seq); curEmo=k; updateInfo(); }
@@ -456,6 +496,26 @@ function impulse(sec){
    duo    : piano feutré posé sur une nappe coton discrète */
 const SOUNDS={coton:{label:'Coton',pad:1,piano:0,lp:950}, feutre:{label:'Piano feutré',pad:0,piano:1,lp:1500}, duo:{label:'Coton + piano',pad:0.55,piano:0.8,lp:1200}};
 let soundMode='duo', padBus=null, pianoBus=null;
+function addAmbience(kind,dur){
+  if(!kind) return;
+  const sr=actx.sampleRate, n=Math.ceil(sr*dur), buf=actx.createBuffer(2,n,sr);
+  for(let c=0;c<2;c++){ const d=buf.getChannelData(c); let last=0;
+    for(let i=0;i<n;i++){ const w=Math.random()*2-1; if(kind==='waves'||kind==='wind'||kind==='breeze'){ last=(last+0.02*w)/1.02; d[i]=last*3.5; } else d[i]=w; } }
+  const src=actx.createBufferSource(); src.buffer=buf;
+  const f=actx.createBiquadFilter(), g=actx.createGain(), out=actx.createGain();
+  src.connect(f); f.connect(g); g.connect(out); out.connect(actx.destination);
+  const lvl={rain:0.05,waves:0.11,wind:0.07,breeze:0.045,crickets:0}[kind]||0.05;
+  out.gain.setValueAtTime(0,0); out.gain.linearRampToValueAtTime(1,2.5); out.gain.setValueAtTime(1,dur-2); out.gain.linearRampToValueAtTime(0,dur);
+  if(kind==='rain'){ f.type='bandpass'; f.frequency.value=2500; f.Q.value=0.5; g.gain.value=lvl; }
+  else if(kind==='waves'){ f.type='lowpass'; f.frequency.value=600; for(let t=0;t<dur;t+=7){ g.gain.setValueAtTime(lvl*0.25,t); g.gain.linearRampToValueAtTime(lvl,t+3); g.gain.linearRampToValueAtTime(lvl*0.25,t+7); } }
+  else { f.type='bandpass'; f.Q.value=0.7; for(let t=0;t<dur;t+=6){ f.frequency.setValueAtTime(350,t); f.frequency.linearRampToValueAtTime(700,t+3); f.frequency.linearRampToValueAtTime(350,t+6); } g.gain.value=lvl; }
+  src.start(0);
+  if(kind==='crickets'){                      /* petits chants de grillons espacés */
+    const og=actx.createGain(); og.gain.value=0; og.connect(out);
+    const osc=actx.createOscillator(); osc.type='sine'; osc.frequency.value=4300; osc.connect(og); osc.start(0);
+    for(let t=1.5;t<dur-1;t+=0.9+Math.random()*1.4){ for(let k=0;k<3;k++){ const s=t+k*0.07; og.gain.setValueAtTime(0,s); og.gain.linearRampToValueAtTime(0.012,s+0.01); og.gain.linearRampToValueAtTime(0,s+0.045); } }
+  }
+}
 function initAudio(ctxOverride){
   actx=ctxOverride||new (window.AudioContext||window.webkitAudioContext)();
   master=actx.createGain(); master.gain.value=0;
@@ -574,11 +634,14 @@ function drawMid(th){
     for(let x=0;x<W;x+=2){ const wx=Math.floor(x+scroll*m.p); const sway=Math.sin(tAll*2+wx*.25)>.5?1:0; R(x+sway,m.base-1-(hash(wx)>.5?1:0),1,2,m.cap); }
     return;
   }
-  const sp=m.type==='pine'?17:21, off=scroll*m.p, first=Math.floor(off/sp)-1;
+  const sp=m.type==='pine'?17:m.type==='city'?15:21, off=scroll*m.p, first=Math.floor(off/sp)-1;
   for(let i=first;i<first+W/sp+3;i++){
-    if(hash(i*3.7)<.25) continue;
+    if(m.type!=='city' && hash(i*3.7)<.25) continue;
     const x=i*sp-off+Math.floor(hash(i)*6), s=hash(i+11);
-    if(m.type==='round'){ const r=4+Math.round(s*3); R(x+r-1,m.base-5,2,5,m.c); disc(ctx,x+r,m.base-6-r,r,m.c); }
+    if(m.type==='round'){ const r=4+Math.round(s*3); R(x+r-1,m.base-5,2,5,m.c); disc(ctx,x+r,m.base-6-r,r,m.cols?m.cols[Math.floor(hash(i+5)*m.cols.length)]:m.c);
+      if(m.cols){ disc(ctx,x+r-1,m.base-7-r,Math.max(1,r-3),m.cols[Math.floor(hash(i+9)*m.cols.length)]); } }
+    else if(m.type==='city'){ const bw=8+Math.round(s*6), bh=14+Math.round(hash(i+3)*22); R(x,m.base-bh,bw,bh,m.c);
+      for(let wy=m.base-bh+3;wy<m.base-3;wy+=4) for(let wx=x+2;wx<x+bw-2;wx+=3){ const h=hash(i*31+wx*7+wy*13); if(h>.55) R(wx,wy,1,2,m.win[Math.floor(h*97)%m.win.length]); } }
     else { const hgt=12+Math.round(s*8); R(x+5,m.base-3,2,3,'#2b3f42');
       for(let r=0;r<hgt;r++){ const w=1+Math.floor(r*0.7)*2; R(x+6-Math.floor(w/2),m.base-3-hgt+r,w,1,(r%4===0&&r>1)?m.cap:m.c);} }
   }
@@ -591,18 +654,35 @@ function drawGround(th){
     const x=i*sp-scroll, y=GY+3+Math.floor(hash(i+9)*(H-GY-6)), c=g.deco[Math.floor(hash(i+4)*g.deco.length)];
     if(g.kind==='flower'){ R(x,y,1,1,c); R(x,y+1,1,1,'#3d5a3f'); }
     else if(g.kind==='shell'||g.kind==='stone'){ R(x,y,2,1,c); }
+    else if(g.kind==='puddle'){ if(Math.sin(tAll*2+i)>-.3) R(x,y,3,1,c); }
     else { R(x,y,1,2,c); R(x+1,y+1,1,1,c); }
   }
 }
 function updateWeather(th,dt){
   if(!th.weather) return;
-  const target=th.weather==='snow'?40:th.weather==='fireflies'?14:10;
-  while(weather.length<target) weather.push({x:Math.random()*W,y:th.weather==='snow'?Math.random()*-H:Math.random()*GY,ph:Math.random()*6,s:Math.random()});
+  const wt=th.weather, target={snow:40,snowlight:16,fireflies:14,rain:45,leaves:12,petals:16}[wt]||10;
+  while(weather.length<target) weather.push({x:Math.random()*W,y:(wt==='snow'||wt==='snowlight'||wt==='rain')?Math.random()*-H:Math.random()*GY,ph:Math.random()*6,s:Math.random()});
   weather.forEach(p=>{
-    if(th.weather==='snow'){ p.y+=(6+p.s*8)*dt; p.x+=(Math.sin(tAll+p.ph)*3-4)*dt; if(p.y>H){p.y=-2;p.x=Math.random()*W;} if(p.x<0)p.x+=W; R(p.x,p.y,1,1,p.s>.7?'#ffffff':'#eef4fb'); }
+    if(wt==='rain'){ p.y+=(90+p.s*40)*dt; p.x-=12*dt; if(p.y>H){p.y=-4-Math.random()*20;p.x=Math.random()*(W+20);} if(p.x<0)p.x+=W;
+      R(p.x,p.y,1,3,p.s>.5?'#c3cdf5':'#8f9bd6'); if(p.y>GY && p.y<GY+4 && p.s>.8) R(p.x-1,GY+1,3,1,'#8fa0d8'); }
+    else if(wt==='leaves'||wt==='petals'){ p.y+=(7+p.s*6)*dt; p.x+=(Math.sin(tAll*1.5+p.ph)*8-9)*dt; if(p.y>H){p.y=-2;p.x=Math.random()*W;} if(p.x<0)p.x+=W;
+      const cols=wt==='leaves'?['#d9652c','#e8a23a','#a8432e']:['#f7c3d4','#ffffff','#f4a7c0']; const c=cols[Math.floor(p.s*3)%3];
+      R(p.x,p.y,1,1,c); if(Math.sin(tAll*4+p.ph)>0) R(p.x+1,p.y,1,1,c); }
+    else if(th.weather==='snow'||th.weather==='snowlight'){ p.y+=(6+p.s*8)*dt; p.x+=(Math.sin(tAll+p.ph)*3-4)*dt; if(p.y>H){p.y=-2;p.x=Math.random()*W;} if(p.x<0)p.x+=W; R(p.x,p.y,1,1,p.s>.7?'#ffffff':'#eef4fb'); }
     else if(th.weather==='fireflies'){ p.x+=(Math.sin(tAll*.7+p.ph)*3-6)*dt; p.y+=Math.cos(tAll*.9+p.ph)*2*dt; if(p.x<0)p.x+=W; if(Math.sin(tAll*2.5+p.ph*3)>0) R(p.x,p.y,1,1,'#ffe9a0'); }
     else { p.x+=(-8+Math.sin(tAll+p.ph)*2)*dt; p.y+=Math.sin(tAll*1.3+p.ph)*2*dt; if(p.x<0)p.x+=W; R(p.x,p.y,1,1,'#fffaf0'); }
   });
+}
+function drawAurora(th){
+  if(!th.aurora) return;
+  const cols=['#5effb0','#4fe0c8','#7fd8ff','#a78bff'];
+  for(let x=0;x<W;x++){
+    const y=20+Math.sin(x*.07+tAll*.35)*7+Math.sin(x*.023-tAll*.2)*9, len=12+Math.round((Math.sin(x*.11+tAll*.6)+1)*7);
+    const a=0.30+0.15*Math.sin(x*.05+tAll*.8);
+    ctx.globalAlpha=Math.max(0.04,a); R(x,y,1,len,cols[Math.floor((x/W*2+tAll*.05)*4)%4]);
+    ctx.globalAlpha=Math.max(0.02,a*.5); R(x,y+len,1,Math.round(len*.8),cols[(Math.floor((x/W*2+tAll*.05)*4)+1)%4]);
+  }
+  ctx.globalAlpha=1;
 }
 function drawStarsTwinkle(th){
   if(!th.stars) return;
@@ -703,7 +783,7 @@ function step(dt){
 
   const th=THEMES[themeIdx];
   ctx.drawImage(staticLayer,0,0);
-  drawStarsTwinkle(th); drawFar(th); if(th.sea) drawSea(th); drawMid(th); drawGround(th); updateWeather(th,dt);
+  drawStarsTwinkle(th); drawAurora(th); drawFar(th); if(th.sea) drawSea(th); drawMid(th); drawGround(th); updateWeather(th,dt);
 
   const hop=hopT<.4?Math.round(Math.sin(Math.PI*hopT/.4)*3):0;
   const f=hop>0?1:Math.floor(tAll/.2)%4;
@@ -741,9 +821,14 @@ if(!RENDER){ generateRule('maj'); drawChips(); drawSounds(); requestAnimationFra
 else {
   const mode=QS.get('mode')||(Math.random()<0.75?'maj':'min');
   generateRule(mode); fade=null;
-  const th=QS.has('theme')?+QS.get('theme'):(mode==='maj'?pick([0,1,3]):2); setTheme(th);
+  const avoid=(QS.get('avoid')||'').split(',').filter(Boolean).map(Number);
+  let pool=THEMES_FOR[mode].filter(t=>!avoid.includes(t)); if(!pool.length) pool=THEMES_FOR[mode];
+  const th=QS.has('theme')?+QS.get('theme'):pick(pool); setTheme(th);
+  const avoidO=(QS.get('avoidOutfit')||'').split(',').filter(Boolean).map(Number);
+  let opool=OUTFITS.map((_,i)=>i).filter(i=>!avoidO.includes(i)); if(!opool.length) opool=OUTFITS.map((_,i)=>i);
+  setOutfit(QS.has('outfit')?+QS.get('outfit'):pick(opool));
   window.__frame=dt=>step(dt);
-  window.__meta={duration:TOTAL, key:keyLabel, mode, spice:spiceUsed?SPICE_LABEL[spiceUsed]:'', theme:THEMES[themeIdx].name,
+  window.__meta={duration:TOTAL, key:keyLabel, mode, spice:spiceUsed?SPICE_LABEL[spiceUsed]:'', theme:THEMES[themeIdx].name, themeIdx, outfit:outfitIdx, outfitName:OUTFITS[outfitIdx].name, ambience:AMB[themeIdx],
     chords:SEQ.map(c=>({name:c.name, degree:c.ro, start:+c.start.toFixed(3), dur:+c.dur.toFixed(3)}))};
   window.__renderAudio=async()=>{
     const sr=44100, dur=TOTAL+1.5;
@@ -752,6 +837,7 @@ else {
     master.gain.setValueAtTime(0,0); master.gain.linearRampToValueAtTime(0.85,1.2);
     master.gain.setValueAtTime(0.85,dur-1.6); master.gain.linearRampToValueAtTime(0,dur);
     SEQ.forEach(c=>glideTo(c.notes,c.climax,c.start));
+    addAmbience(AMB[themeIdx],dur);
     const buf=await actx.startRendering();
     const L=buf.getChannelData(0), Rr=buf.getChannelData(1); let peak=1e-6;
     for(let i=0;i<L.length;i++){ peak=Math.max(peak,Math.abs(L[i]),Math.abs(Rr[i])); }

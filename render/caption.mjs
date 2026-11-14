@@ -25,7 +25,7 @@ const TXT = {
 };
 const KEY_FR = k => k.replace(/^([A-G])([♯♭]?)/, (_, n, a) => ({C:'Do',D:'Ré',E:'Mi',F:'Fa',G:'Sol',A:'La',B:'Si'})[n] + (a === '♯' ? ' dièse' : a === '♭' ? ' bémol' : ''));
 const KEY_EN = k => k.replace(' majeur', ' major').replace(' mineur', ' minor');
-const SPICE_EN = { 'dominante secondaire': 'a secondary dominant', 'accord emprunté (iv)': 'a borrowed minor iv chord', 'cadence rompue': 'a deceptive cadence', 'retard (sus4)': 'a sus4 suspension' };
+const SPICE_EN = { 'dominante secondaire': 'a secondary dominant', 'accord emprunté (iv)': 'a borrowed minor iv chord', 'cadence rompue': 'a deceptive cadence', 'retard (sus4)': 'a sus4 suspension', 'cadence plagale': 'a plagal "amen" cadence' };
 
 export function buildCaption(meta, cfg) {
   const lang = cfg.langue === 'en' ? 'en' : 'fr', T = TXT[lang];

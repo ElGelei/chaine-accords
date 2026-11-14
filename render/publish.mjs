@@ -117,7 +117,7 @@ for (const p of cfg.plateformes.filter(p => PLATFORMS[p])) {
 if (Object.keys(results).length) {
   const hist = JSON.parse(await readFile('state/historique.json', 'utf8').catch(() => '[]'));
   hist.push({ date: meta.date, seed: meta.seed, signature: meta.signature, key: meta.key,
-    chords: meta.chords.map(c => c.name).join(' '), links: results, failed });
+    chords: meta.chords.map(c => c.name).join(' '), theme: meta.themeIdx, outfit: meta.outfit, links: results, failed });
   await writeFile('state/historique.json', JSON.stringify(hist, null, 1));
 }
 if (failed.length) { console.error(`Failed on: ${failed.join(', ')}`); process.exit(1); }
