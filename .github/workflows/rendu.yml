@@ -1,15 +1,20 @@
-name: Rendu quotidien
+name: Publication quotidienne
 on:
   schedule:
-    - cron: '0 6 * * *'   # tous les jours à 7 h, heure de Paris
-  workflow_dispatch:       # bouton pour lancer à la main
-defaults:
-  run:
-    working-directory: chaine-accords
+    - cron: '30 16 * * *'   # tous les jours à 17 h 30 (heure de Paris en hiver)
+  workflow_dispatch:
+    inputs:
+      publier:
+        description: 'Publier vraiment sur les réseaux ?'
+        type: boolean
+        default: false
+permissions:
+  contents: write
+concurrency: quotidien
 jobs:
-  render:
+  quotidien:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,13 +24,46 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Dépendances
         run: npm install && npx playwright install --with-deps chromium
-      - name: Rendu de la vidéo du jour
-        run: node render/render.mjs
-      - name: Vidéo disponible en téléchargement
+
+      - name: Rendu de la vidéo du jour (3 essais)
+        run: |
+          for i in 1 2 3; do
+            node render/render.mjs && node render/qc.mjs && exit 0
+            echo "Essai $i raté, nouvel essai dans 30 s"; sleep 30
+          done
+          exit 1
+
+      - name: Publication
+        if: ${{ github.event_name == 'schedule' || inputs.publier }}
+        env:
+          UPLOAD_POST_API_KEY: ${{ secrets.UPLOAD_POST_API_KEY }}
+          UPLOAD_POST_USER: ${{ secrets.UPLOAD_POST_USER }}
+          PLATFORMS: ${{ vars.PLATFORMS }}
+        run: node render/publish.mjs
+
+      - name: Aperçu de la légende (sans publier)
+        if: ${{ github.event_name != 'schedule' && !inputs.publier }}
+        run: node render/publish.mjs
+        env:
+          UPLOAD_POST_API_KEY: ''
+
+      - name: Enregistrer l'historique
+        if: ${{ github.event_name == 'schedule' || inputs.publier }}
+        run: |
+          git config user.name "chaine-accords-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state/historique.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Historique : vidéo du $(date +%F)"
+          for i in 1 2 3; do git pull --rebase && git push && break; sleep 10; done
+
+      - name: Vidéo en téléchargement
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: video-du-jour
           path: |
-            chaine-accords/out/*.mp4
-            chaine-accords/out/*.json
+            out/video.mp4
+            out/video.json
           retention-days: 14
+          if-no-files-found: ignore
