@@ -18,8 +18,8 @@ jobs:
     env:
       PUBLISH: ${{ (github.event_name == 'schedule' || inputs.publier) && '1' || '0' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: Outils
@@ -70,7 +70,7 @@ jobs:
 
       - name: Vidéo en téléchargement
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: video-du-jour
           path: |
