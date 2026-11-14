@@ -54,10 +54,10 @@ jobs:
           VIDEO_URL: ${{ steps.release.outputs.url }}
           MAKE_WEBHOOK_URL: ${{ secrets.MAKE_WEBHOOK_URL }}
           IG_TOKEN: ${{ secrets.IG_TOKEN }}
-          IG_TOKEN_KEY: ${{ secrets.IG_TOKEN_KEY }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
         run: node render/publish.mjs
 
-      - name: Enregistrer l'historique et le jeton Instagram
+      - name: Enregistrer l'historique
         if: always() && env.PUBLISH == '1'
         run: |
           git config user.name "chaine-accords-bot"
