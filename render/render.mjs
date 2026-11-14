@@ -41,8 +41,8 @@ await writeFile(wav, Buffer.from(await page.evaluate('window.__renderAudio()'), 
 const total = Math.ceil((meta.duration + 1.5) * FPS);
 const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error',
   '-f', 'image2pipe', '-framerate', String(FPS), '-i', '-', '-i', wav,
-  '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p',
-  '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', mp4],
+  '-c:v', 'libx264', '-preset', 'slow', '-crf', '26', '-pix_fmt', 'yuv420p',
+  '-c:a', 'aac', '-b:a', '128k', '-shortest', '-movflags', '+faststart', mp4],
   { stdio: ['pipe', 'inherit', 'inherit'] });
 const done = new Promise((res, rej) => ff.on('close', c => c === 0 ? res() : rej(new Error('ffmpeg a échoué (' + c + ')'))));
 

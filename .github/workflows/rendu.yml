@@ -1,7 +1,7 @@
 name: Publication quotidienne
 on:
   schedule:
-    - cron: '30 16 * * *'   # tous les jours à 17 h 30 (heure de Paris en hiver)
+    - cron: '30 16 * * *'   # every day 17:30 Paris (winter time)
   workflow_dispatch:
     inputs:
       publier:
@@ -15,6 +15,8 @@ jobs:
   quotidien:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      PUBLISH: ${{ (github.event_name == 'schedule' || inputs.publier) && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -33,23 +35,34 @@ jobs:
           done
           exit 1
 
+      - name: Mise en ligne publique de la vidéo (release GitHub)
+        id: release
+        if: env.PUBLISH == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="video-$(jq -r .date out/video.json)"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes "$(jq -r '.key + " · " + ([.chords[].name] | join(" "))' out/video.json)"
+          gh release upload "$TAG" out/video.mp4 --clobber
+          echo "url=https://github.com/${{ github.repository }}/releases/download/$TAG/video.mp4" >> "$GITHUB_OUTPUT"
+          # keep only the 14 latest releases
+          gh release list --limit 200 --json tagName -q '.[].tagName' | grep '^video-' | sort -r | tail -n +15 | xargs -r -I{} gh release delete {} --yes --cleanup-tag
+
       - name: Publication (ou répétition si « publier » n'est pas coché)
         env:
-          DRY_RUN: ${{ (github.event_name == 'schedule' || inputs.publier) && '0' || '1' }}
-          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
-          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
-          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-          META_PAGE_TOKEN: ${{ secrets.META_PAGE_TOKEN }}
-          META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
-          META_IG_USER_ID: ${{ secrets.META_IG_USER_ID }}
+          DRY_RUN: ${{ env.PUBLISH == '1' && '0' || '1' }}
+          VIDEO_URL: ${{ steps.release.outputs.url }}
+          MAKE_WEBHOOK_URL: ${{ secrets.MAKE_WEBHOOK_URL }}
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+          IG_TOKEN_KEY: ${{ secrets.IG_TOKEN_KEY }}
         run: node render/publish.mjs
 
-      - name: Enregistrer l'historique
-        if: ${{ always() && (github.event_name == 'schedule' || inputs.publier) }}
+      - name: Enregistrer l'historique et le jeton Instagram
+        if: always() && env.PUBLISH == '1'
         run: |
           git config user.name "chaine-accords-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add state/historique.json
+          git add state/
           git diff --cached --quiet && exit 0
           git commit -m "Historique : vidéo du $(date +%F)"
           for i in 1 2 3; do git pull --rebase && git push && break; sleep 10; done

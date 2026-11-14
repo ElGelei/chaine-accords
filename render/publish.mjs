@@ -1,17 +1,18 @@
-// Publie out/video.mp4 directement via les API officielles (gratuites) :
-//   YouTube Shorts (YouTube Data API v3), Instagram Reels et Facebook Reels (API Graph de Meta).
-// Chaque plateforme n'est utilisée que si ses secrets sont présents ; une plateforme en échec
-// n'empêche pas les autres. Le job échoue à la fin si au moins une a échoué (→ e-mail GitHub).
-import { readFile, writeFile, stat } from 'node:fs/promises';
+// Publishes today's video (out/video.mp4, already online at VIDEO_URL) — 100 % free:
+//   • YouTube Shorts : via a Make.com scenario (webhook → download → YouTube "Upload a video").
+//   • Instagram Reels : directly via Meta's "Instagram API with Instagram Login" (no Facebook Page).
+// Each platform runs only if its secrets exist; one failing platform doesn't block the other.
+// The job fails at the end if any platform failed (→ GitHub e-mail).
+//
+// Env : VIDEO_URL, MAKE_WEBHOOK_URL, IG_TOKEN (first token), IG_TOKEN_KEY (encryption key), DRY_RUN=1
+import { readFile, writeFile } from 'node:fs/promises';
+import crypto from 'node:crypto';
 import { buildCaption } from './caption.mjs';
 
 const cfg = JSON.parse(await readFile('config.json', 'utf8'));
 const meta = JSON.parse(await readFile('out/video.json', 'utf8'));
 const cap = buildCaption(meta, cfg);
-const VIDEO = 'out/video.mp4';
-const env = process.env;
-const DRY = env.DRY_RUN === '1';
-const G = 'https://graph.facebook.com/v23.0';
+const env = process.env, DRY = env.DRY_RUN === '1';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function req(url, opts = {}) {
@@ -19,79 +20,99 @@ async function req(url, opts = {}) {
   const t = await r.text();
   let j; try { j = JSON.parse(t); } catch { j = { raw: t }; }
   if (!r.ok || j.error) throw new Error(`${r.status} ${url.split('?')[0]} : ${t.slice(0, 600)}`);
-  return { j, r };
+  return j;
 }
-const form = o => new URLSearchParams(Object.entries(o).filter(([, v]) => v !== undefined));
-const retry = async (fn, n = 3) => { let e; for (let i = 1; i <= n; i++) { try { return await fn(); } catch (x) { e = x; console.error(`   essai ${i} raté : ${x.message}`); await sleep(30_000 * i); } } throw e; };
+const retry = async (fn, n = 3) => { let e; for (let i = 1; i <= n; i++) { try { return await fn(); } catch (x) { e = x; console.error(`   attempt ${i} failed: ${x.message}`); if (i < n) await sleep(30_000 * i); } } throw e; };
 
-// ---------- YouTube Shorts ----------
+// ---------- YouTube (through Make) ----------
 async function youtube() {
-  const { j: tok } = await req('https://oauth2.googleapis.com/token', { method: 'POST', body: form({
-    client_id: env.YT_CLIENT_ID, client_secret: env.YT_CLIENT_SECRET, refresh_token: env.YT_REFRESH_TOKEN, grant_type: 'refresh_token' }) });
-  const bytes = await readFile(VIDEO);
-  const metaBody = JSON.stringify({
-    snippet: { title: cap.youtubeTitle, description: cap.text, categoryId: '10', tags: ['piano', 'chords', 'chord progression', 'relaxing music', 'calm', 'pixel art', 'music theory', 'lofi', 'sleep music', 'study music'] },
-    status: { privacyStatus: 'public', selfDeclaredMadeForKids: false }
-  });
-  const { r } = await req('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
-    method: 'POST', body: metaBody,
-    headers: { Authorization: `Bearer ${tok.access_token}`, 'Content-Type': 'application/json; charset=UTF-8',
-      'X-Upload-Content-Type': 'video/mp4', 'X-Upload-Content-Length': String(bytes.length) } });
-  const { j } = await req(r.headers.get('location'), { method: 'PUT', body: bytes, headers: { 'Content-Type': 'video/mp4' } });
-  return `https://youtube.com/shorts/${j.id}`;
+  const body = { video_url: env.VIDEO_URL, title: cap.youtubeTitle, description: cap.text,
+    tags: 'piano,chords,chord progression,relaxing music,calm,pixel art,music theory,lofi,sleep music,study music',
+    date: meta.date, key: meta.key };
+  const r = await fetch(env.MAKE_WEBHOOK_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const t = await r.text();
+  if (!r.ok) throw new Error(`Make ${r.status}: ${t.slice(0, 300)}`);
+  return `sent to Make (${t.slice(0, 60) || 'Accepted'})`;
+}
+
+// ---------- Instagram token: stored encrypted in the repo, renewed automatically ----------
+const TOKEN_FILE = 'state/ig_token.enc';
+const key = () => crypto.createHash('sha256').update(env.IG_TOKEN_KEY).digest();
+function encrypt(obj) {
+  const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', key(), iv);
+  const data = Buffer.concat([c.update(JSON.stringify(obj), 'utf8'), c.final()]);
+  return Buffer.concat([iv, c.getAuthTag(), data]).toString('base64');
+}
+function decrypt(b64) {
+  const buf = Buffer.from(b64, 'base64'), d = crypto.createDecipheriv('aes-256-gcm', key(), buf.subarray(0, 12));
+  d.setAuthTag(buf.subarray(12, 28));
+  return JSON.parse(Buffer.concat([d.update(buf.subarray(28)), d.final()]).toString('utf8'));
+}
+async function igToken() {
+  let st = null;
+  try { st = decrypt((await readFile(TOKEN_FILE, 'utf8')).trim()); } catch { /* first run */ }
+  if (!st) st = { token: env.IG_TOKEN, refreshed: 0 };
+  const DAY = 86_400_000;
+  if (Date.now() - st.refreshed > 7 * DAY) {          // renew at most once a week (valid 60 days)
+    try {
+      const j = await req(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(st.token)}`);
+      st = { token: j.access_token, refreshed: Date.now() };
+      await writeFile(TOKEN_FILE, encrypt(st) + '\n');
+      console.log(`   Instagram token renewed (valid ${Math.round(j.expires_in / 86400)} days)`);
+    } catch (e) {
+      console.error('   token renewal skipped: ' + e.message);
+      if (!st.refreshed) await writeFile(TOKEN_FILE, encrypt({ token: st.token, refreshed: Date.now() - 6 * DAY }) + '\n');
+    }
+  }
+  return st.token;
 }
 
 // ---------- Instagram Reels ----------
 async function instagram() {
-  const T = env.META_PAGE_TOKEN, IG = env.META_IG_USER_ID, size = (await stat(VIDEO)).size;
-  const { j: c } = await req(`${G}/${IG}/media`, { method: 'POST', body: form({
-    media_type: 'REELS', upload_type: 'resumable', caption: cap.text, share_to_feed: 'true', access_token: T }) });
-  await req(c.uri || `https://rupload.facebook.com/ig-api-upload/v23.0/${c.id}`, { method: 'POST', body: await readFile(VIDEO),
-    headers: { Authorization: `OAuth ${T}`, offset: '0', file_size: String(size) } });
-  for (let i = 0; i < 60; i++) {                                   // traitement côté Instagram (≤ 10 min)
+  const T = await igToken(), IG = 'https://graph.instagram.com';
+  const me = await req(`${IG}/me?fields=user_id,username&access_token=${T}`);
+  // GitHub release links redirect to a signed file URL: hand Instagram the final URL.
+  const head = await fetch(env.VIDEO_URL, { method: 'HEAD', redirect: 'manual' });
+  const videoUrl = head.headers.get('location') || env.VIDEO_URL;
+  const c = await req(`${IG}/${me.user_id}/media`, { method: 'POST', body: new URLSearchParams({
+    media_type: 'REELS', video_url: videoUrl, caption: cap.text, share_to_feed: 'true', access_token: T }) });
+  let status = '';
+  for (let i = 0; i < 60; i++) {                       // Instagram processing (≤ 10 min)
     await sleep(10_000);
-    const { j: s } = await req(`${G}/${c.id}?fields=status_code,status&access_token=${T}`);
-    if (s.status_code === 'FINISHED') break;
-    if (s.status_code === 'ERROR' || s.status_code === 'EXPIRED') throw new Error('Instagram a refusé la vidéo : ' + JSON.stringify(s));
+    const s = await req(`${IG}/${c.id}?fields=status_code,status&access_token=${T}`);
+    status = s.status_code;
+    if (status === 'FINISHED') break;
+    if (status === 'ERROR' || status === 'EXPIRED') throw new Error('Instagram rejected the video: ' + JSON.stringify(s));
   }
-  const { j: p } = await req(`${G}/${IG}/media_publish`, { method: 'POST', body: form({ creation_id: c.id, access_token: T }) });
-  const { j: m } = await req(`${G}/${p.id}?fields=permalink&access_token=${T}`).catch(() => ({ j: {} }));
-  return m.permalink || `media ${p.id}`;
-}
-
-// ---------- Facebook Reels ----------
-async function facebook() {
-  const T = env.META_PAGE_TOKEN, PAGE = env.META_PAGE_ID, size = (await stat(VIDEO)).size;
-  const { j: s } = await req(`${G}/${PAGE}/video_reels`, { method: 'POST', body: form({ upload_phase: 'start', access_token: T }) });
-  await req(s.upload_url || `https://rupload.facebook.com/video-upload/v23.0/${s.video_id}`, { method: 'POST', body: await readFile(VIDEO),
-    headers: { Authorization: `OAuth ${T}`, offset: '0', file_size: String(size) } });
-  await req(`${G}/${PAGE}/video_reels`, { method: 'POST', body: form({
-    upload_phase: 'finish', video_id: s.video_id, video_state: 'PUBLISHED', description: cap.text, access_token: T }) });
-  return `https://www.facebook.com/reel/${s.video_id}`;
+  if (status !== 'FINISHED') throw new Error('Instagram processing timed out');
+  const p = await req(`${IG}/${me.user_id}/media_publish`, { method: 'POST', body: new URLSearchParams({ creation_id: c.id, access_token: T }) });
+  const m = await req(`${IG}/${p.id}?fields=permalink&access_token=${T}`).catch(() => ({}));
+  return m.permalink || `@${me.username} media ${p.id}`;
 }
 
 const PLATFORMS = {
-  youtube:   { fn: youtube,   needs: ['YT_CLIENT_ID', 'YT_CLIENT_SECRET', 'YT_REFRESH_TOKEN'] },
-  instagram: { fn: instagram, needs: ['META_PAGE_TOKEN', 'META_IG_USER_ID'] },
-  facebook:  { fn: facebook,  needs: ['META_PAGE_TOKEN', 'META_PAGE_ID'] }
+  youtube:   { fn: youtube,   needs: ['MAKE_WEBHOOK_URL', 'VIDEO_URL'] },
+  instagram: { fn: instagram, needs: ['IG_TOKEN_KEY', 'VIDEO_URL'] }
 };
 
-console.log('— Légende —\n' + cap.text + '\n————');
-const wanted = cfg.plateformes.filter(p => PLATFORMS[p]);
+console.log('— Caption —\n' + cap.text + '\n————');
 const results = {}, failed = [];
-for (const p of wanted) {
+for (const p of cfg.plateformes.filter(p => PLATFORMS[p])) {
   const missing = PLATFORMS[p].needs.filter(k => !env[k]);
-  if (missing.length) { console.log(`⏭  ${p} : pas configuré (${missing.join(', ')})`); continue; }
-  if (DRY) { console.log(`🧪 ${p} : prêt (répétition, rien n’est publié)`); continue; }
+  if (p === 'instagram' && !env.IG_TOKEN) {
+    try { await readFile(TOKEN_FILE); } catch { missing.push('IG_TOKEN'); }
+  }
+  if (DRY) { console.log(missing.length ? `⏭  ${p}: not configured (${missing.join(', ')})` : `🧪 ${p}: ready (dry run, nothing posted)`); continue; }
+  if (missing.length) { console.log(`⏭  ${p}: not configured (${missing.join(', ')})`); continue; }
   console.log(`▶ ${p}…`);
-  try { results[p] = await retry(PLATFORMS[p].fn); console.log(`✓ ${p} : ${results[p]}`); }
-  catch (e) { failed.push(p); console.error(`✗ ${p} : ${e.message}`); }
+  try { results[p] = await retry(PLATFORMS[p].fn); console.log(`✓ ${p}: ${results[p]}`); }
+  catch (e) { failed.push(p); console.error(`✗ ${p}: ${e.message}`); }
 }
 
 if (Object.keys(results).length) {
   const hist = JSON.parse(await readFile('state/historique.json', 'utf8').catch(() => '[]'));
-  hist.push({ date: meta.date, seed: meta.seed, signature: meta.signature, cle: meta.key,
-    accords: meta.chords.map(c => c.name).join(' '), liens: results, echecs: failed });
+  hist.push({ date: meta.date, seed: meta.seed, signature: meta.signature, key: meta.key,
+    chords: meta.chords.map(c => c.name).join(' '), links: results, failed });
   await writeFile('state/historique.json', JSON.stringify(hist, null, 1));
 }
-if (failed.length) { console.error(`Échec sur : ${failed.join(', ')}`); process.exit(1); }
+if (failed.length) { console.error(`Failed on: ${failed.join(', ')}`); process.exit(1); }
