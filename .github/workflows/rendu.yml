@@ -55,6 +55,7 @@ jobs:
           MAKE_WEBHOOK_URL: ${{ secrets.MAKE_WEBHOOK_URL }}
           IG_TOKEN: ${{ secrets.IG_TOKEN }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_TOKEN_KEY: ${{ secrets.IG_TOKEN_KEY }}
         run: node render/publish.mjs
 
       - name: Enregistrer l'historique

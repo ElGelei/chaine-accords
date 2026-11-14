@@ -6,6 +6,7 @@
 //
 // Env : VIDEO_URL, MAKE_WEBHOOK_URL, IG_TOKEN, IG_USER_ID, DRY_RUN=1
 import { readFile, writeFile } from 'node:fs/promises';
+import crypto from 'node:crypto';
 import { buildCaption } from './caption.mjs';
 
 const cfg = JSON.parse(await readFile('config.json', 'utf8'));
@@ -35,22 +36,49 @@ async function youtube() {
 }
 
 // ---------- Instagram Reels ----------
-// New Meta apps only offer "Unified login" (Facebook Login for Business). We use a *system user*
-// token from Meta Business Suite: it never expires, so there is nothing to renew.
-// Env: IG_TOKEN (system user token), IG_USER_ID (Instagram account ID, optional: auto-detected).
-const G = 'https://graph.facebook.com/v25.0';
-async function igUserId(T) {
-  if (env.IG_USER_ID) return env.IG_USER_ID;
-  for (const path of ['me/assigned_instagram_accounts?fields=id,username', 'me/accounts?fields=instagram_business_account']) {
-    const j = await req(`${G}/${path}&access_token=${T}`).catch(() => null);
-    const d = j?.data?.[0];
-    const id = d?.instagram_business_account?.id || (d && !d.instagram_business_account && d.id);
-    if (id) return id;
+// Works with both token kinds Meta hands out:
+//   • "EAA…"  (system user / Facebook login) → graph.facebook.com, never expires.
+//   • "IGAA…" (Instagram login)              → graph.instagram.com, valid 60 days: renewed weekly
+//     and stored encrypted in state/ig_token.enc (needs the IG_TOKEN_KEY secret).
+// Env: IG_TOKEN, IG_USER_ID (optional), IG_TOKEN_KEY (only for IGAA tokens).
+const TOKEN_FILE = 'state/ig_token.enc';
+const ekey = () => crypto.createHash('sha256').update(env.IG_TOKEN_KEY).digest();
+function encrypt(obj) {
+  const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', ekey(), iv);
+  const data = Buffer.concat([c.update(JSON.stringify(obj), 'utf8'), c.final()]);
+  return Buffer.concat([iv, c.getAuthTag(), data]).toString('base64');
+}
+function decrypt(b64) {
+  const buf = Buffer.from(b64, 'base64'), d = crypto.createDecipheriv('aes-256-gcm', ekey(), buf.subarray(0, 12));
+  d.setAuthTag(buf.subarray(12, 28));
+  return JSON.parse(Buffer.concat([d.update(buf.subarray(28)), d.final()]).toString('utf8'));
+}
+async function igToken() {
+  if (!env.IG_TOKEN.startsWith('IG')) return env.IG_TOKEN;          // never-expiring token
+  if (!env.IG_TOKEN_KEY) { console.log('   ⚠︎ 60-day token without IG_TOKEN_KEY: it will not be renewed'); return env.IG_TOKEN; }
+  let st = null;
+  try { st = decrypt((await readFile(TOKEN_FILE, 'utf8')).trim()); } catch {}
+  if (!st || st.origin !== env.IG_TOKEN.slice(-12)) st = { token: env.IG_TOKEN, refreshed: 0, origin: env.IG_TOKEN.slice(-12) };
+  const DAY = 86_400_000;
+  if (Date.now() - st.refreshed > 7 * DAY) {
+    try {
+      const j = await req(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(st.token)}`);
+      st = { ...st, token: j.access_token, refreshed: Date.now() };
+      console.log(`   Instagram token renewed (valid ${Math.round(j.expires_in / 86400)} days)`);
+    } catch (e) { console.error('   token renewal skipped: ' + e.message); st.refreshed = Date.now() - 6 * DAY; }
+    await writeFile(TOKEN_FILE, encrypt(st) + '\n');
   }
-  throw new Error('Instagram account not found: add the IG_USER_ID secret');
+  return st.token;
 }
 async function instagram() {
-  const T = env.IG_TOKEN, IG = await igUserId(T);
+  const T = await igToken();
+  const G = T.startsWith('IG') ? 'https://graph.instagram.com/v25.0' : 'https://graph.facebook.com/v25.0';
+  let IG = env.IG_USER_ID;
+  if (!IG) {
+    const me = await req(`${G}/me?fields=user_id,id&access_token=${T}`).catch(() => ({}));
+    IG = me.user_id || me.id;
+  }
+  if (!IG) throw new Error('Instagram account not found: add the IG_USER_ID secret');
   // GitHub release links redirect to a signed file URL: hand Instagram the final URL.
   const head = await fetch(env.VIDEO_URL, { method: 'HEAD', redirect: 'manual' });
   const videoUrl = head.headers.get('location') || env.VIDEO_URL;
