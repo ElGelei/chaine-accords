@@ -33,22 +33,19 @@ jobs:
           done
           exit 1
 
-      - name: Publication
-        if: ${{ github.event_name == 'schedule' || inputs.publier }}
+      - name: Publication (ou répétition si « publier » n'est pas coché)
         env:
-          UPLOAD_POST_API_KEY: ${{ secrets.UPLOAD_POST_API_KEY }}
-          UPLOAD_POST_USER: ${{ secrets.UPLOAD_POST_USER }}
-          PLATFORMS: ${{ vars.PLATFORMS }}
+          DRY_RUN: ${{ (github.event_name == 'schedule' || inputs.publier) && '0' || '1' }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          META_PAGE_TOKEN: ${{ secrets.META_PAGE_TOKEN }}
+          META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
+          META_IG_USER_ID: ${{ secrets.META_IG_USER_ID }}
         run: node render/publish.mjs
-
-      - name: Aperçu de la légende (sans publier)
-        if: ${{ github.event_name != 'schedule' && !inputs.publier }}
-        run: node render/publish.mjs
-        env:
-          UPLOAD_POST_API_KEY: ''
 
       - name: Enregistrer l'historique
-        if: ${{ github.event_name == 'schedule' || inputs.publier }}
+        if: ${{ always() && (github.event_name == 'schedule' || inputs.publier) }}
         run: |
           git config user.name "chaine-accords-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
