@@ -1,17 +1,19 @@
 name: Publication quotidienne
 on:
-  # GitHub may delay or drop a scheduled run: several attempts per evening,
-  # the guard below makes sure only the first one actually publishes.
+  # Main trigger: a Make.com scenario calls this workflow every day (auto=true).
+  # GitHub's own schedule is only a backup: it is often hours late, so the guard
+  # ignores it before 17:00 Paris and whenever today's video is already out.
   schedule:
-    - cron: '17 16 * * *'   # 17:17 Paris (winter time)
-    - cron: '47 16 * * *'   # 17:47
-    - cron: '23 17 * * *'   # 18:23
-    - cron: '53 17 * * *'   # 18:53
+    - cron: '7 17 * * *'    # 18:07 Paris (winter time)
     - cron: '37 18 * * *'   # 19:37
   workflow_dispatch:
     inputs:
       publier:
         description: 'Publier vraiment sur les réseaux ?'
+        type: boolean
+        default: false
+      auto:
+        description: 'Déclenchement automatique (Make) : ne publie pas si déjà fait aujourd’hui'
         type: boolean
         default: false
 permissions:
@@ -28,8 +30,11 @@ jobs:
           ref: main
       - id: check
         run: |
-          TODAY=$(TZ=Europe/Paris date +%F)
-          if [ "${{ github.event_name }}" = "schedule" ] && jq -e --arg d "$TODAY" 'any(.[]; .date == $d)' state/historique.json >/dev/null; then
+          TODAY=$(TZ=Europe/Paris date +%F); HOUR=$(TZ=Europe/Paris date +%-H)
+          AUTO=${{ github.event_name == 'schedule' || inputs.auto == true }}
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$HOUR" -lt 17 ]; then
+            echo "Run programmé arrivé trop tard ou trop tôt ($HOUR h à Paris) : ignoré."; echo "go=false" >> "$GITHUB_OUTPUT"
+          elif [ "$AUTO" = "true" ] && jq -e --arg d "$TODAY" 'any(.[]; .date == $d)' state/historique.json >/dev/null; then
             echo "Déjà publié aujourd'hui ($TODAY) : rien à faire."; echo "go=false" >> "$GITHUB_OUTPUT"
           else
             echo "go=true" >> "$GITHUB_OUTPUT"
