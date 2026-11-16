@@ -507,7 +507,7 @@ function addAmbience(kind,dur){
   const src=actx.createBufferSource(); src.buffer=buf;
   const f=actx.createBiquadFilter(), g=actx.createGain(), out=actx.createGain();
   src.connect(f); f.connect(g); g.connect(out); out.connect(actx.destination);
-  const lvl={rain:0.05,waves:0.11,wind:0.07,breeze:0.045,crickets:0}[kind]||0.05;
+  const lvl={rain:0.02,waves:0.045,wind:0.022,breeze:0.014,crickets:0}[kind]||0.02;
   out.gain.setValueAtTime(1,0);
   if(kind==='rain'){ f.type='bandpass'; f.frequency.value=2500; f.Q.value=0.5; g.gain.value=lvl; }
   else if(kind==='waves'){ f.type='lowpass'; f.frequency.value=600; for(let t=0;t<dur;t+=7){ g.gain.setValueAtTime(lvl*0.25,t); g.gain.linearRampToValueAtTime(lvl,t+3); g.gain.linearRampToValueAtTime(lvl*0.25,t+7); } }
@@ -516,20 +516,24 @@ function addAmbience(kind,dur){
   if(kind==='crickets'){                      /* petits chants de grillons espacés */
     const og=actx.createGain(); og.gain.value=0; og.connect(out);
     const osc=actx.createOscillator(); osc.type='sine'; osc.frequency.value=4300; osc.connect(og); osc.start(0);
-    for(let t=1.5;t<dur-1;t+=0.9+Math.random()*1.4){ for(let k=0;k<3;k++){ const s=t+k*0.07; og.gain.setValueAtTime(0,s); og.gain.linearRampToValueAtTime(0.012,s+0.01); og.gain.linearRampToValueAtTime(0,s+0.045); } }
+    for(let t=1.5;t<dur-1;t+=0.9+Math.random()*1.4){ for(let k=0;k<3;k++){ const s=t+k*0.07; og.gain.setValueAtTime(0,s); og.gain.linearRampToValueAtTime(0.005,s+0.01); og.gain.linearRampToValueAtTime(0,s+0.045); } }
   }
 }
 function initAudio(ctxOverride){
   actx=ctxOverride||new (window.AudioContext||window.webkitAudioContext)();
   master=actx.createGain(); master.gain.value=0;
   const lp=actx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=SOUNDS[soundMode].lp; lp.Q.value=0.2; lpNode=lp;
-  const conv=actx.createConvolver(); conv.buffer=impulse(5);
-  const wet=actx.createGain(); wet.gain.value=0.9; const dry=actx.createGain(); dry.gain.value=0.45;
+  const conv=actx.createConvolver(); conv.buffer=impulse(6.5);
+  const wet=actx.createGain(); wet.gain.value=1.0; const dry=actx.createGain(); dry.gain.value=0.45;
   master.connect(lp); lp.connect(dry); dry.connect(actx.destination); lp.connect(conv); conv.connect(wet); wet.connect(actx.destination);
   padBus=actx.createGain(); padBus.gain.value=SOUNDS[soundMode].pad; padBus.connect(master);
+  /* respiration lente de la nappe (±12 %), comme une inspiration toutes les ~5 s */
+  const br=actx.createOscillator(), brg=actx.createGain(); br.frequency.value=0.19; brg.gain.value=SOUNDS[soundMode].pad*0.12; br.connect(brg); brg.connect(padBus.gain); br.start();
   pianoBus=actx.createGain(); pianoBus.gain.value=SOUNDS[soundMode].piano; pianoBus.connect(master);
   (curChord||SEQ[0]).notes.forEach((m,i)=>{
-    const vg=actx.createGain(); vg.gain.value=i===0?0.12:0.05; vg.connect(padBus);
+    const vg=actx.createGain(); vg.gain.value=i===0?0.12:0.05;
+    const pan=actx.createStereoPanner?actx.createStereoPanner():null;
+    if(pan){ pan.pan.value=[0,-0.35,0.35,-0.2,0.2][i]||0; vg.connect(pan); pan.connect(padBus); } else vg.connect(padBus);
     const oscs=[];
     [['sine',0],['triangle',5]].forEach(([type,det],k)=>{
       const o=actx.createOscillator(); o.type=type; o.detune.value=det; o.frequency.value=mtof(m);
@@ -540,17 +544,43 @@ function initAudio(ctxOverride){
     });
     voices.push({vg,oscs,base:vg.gain.value});
   });
+  /* sous-basse : une octave sous la basse, très douce, pour la profondeur (le « ventre ») */
+  const sg=actx.createGain(); sg.gain.value=0.075; sg.connect(padBus);
+  const so=actx.createOscillator(); so.type='sine'; so.frequency.value=mtof((curChord||SEQ[0]).notes[0]-12); so.connect(sg); so.start();
+  subVoice={o:so,g:sg};
 }
+let subVoice=null;
 function setSound(k){
   soundMode=k; if(!actx) return;
   const now=actx.currentTime, S=SOUNDS[k];
   padBus.gain.setTargetAtTime(S.pad,now,0.4); pianoBus.gain.setTargetAtTime(S.piano,now,0.4); lpNode.frequency.setTargetAtTime(S.lp,now,0.4);
 }
-function strike(notes,climax,at){
+const PULSE=0.36;   /* une note d'arpège toutes les 0,36 s, sur une grille fixe : la pulsation hypnotique */
+function pianoNote(m,t,vel,len,pan){
+  const f=mtof(m), g=actx.createGain();
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vel,t+0.015); g.gain.exponentialRampToValueAtTime(vel*0.3,t+0.45); g.gain.exponentialRampToValueAtTime(0.0001,t+len);
+  const tone=actx.createBiquadFilter(); tone.type='lowpass'; tone.frequency.setValueAtTime(2000,t); tone.frequency.exponentialRampToValueAtTime(650,t+1.2);
+  [['triangle',1,1],['sine',2,0.15],['sine',1,0.5]].forEach(([type,mul,amp])=>{
+    const o=actx.createOscillator(), og=actx.createGain(); o.type=type; o.frequency.value=f*mul; og.gain.value=amp; o.connect(og); og.connect(tone); o.start(t); o.stop(t+len+0.1);
+  });
+  if(pan!==undefined && actx.createStereoPanner){ const p=actx.createStereoPanner(); p.pan.value=pan; tone.connect(g); g.connect(p); p.connect(pianoBus); }
+  else { tone.connect(g); g.connect(pianoBus); }
+}
+function arpeggiate(notes,climax,at,dur){
+  const up=notes.slice(1).sort((a,b)=>a-b), pat=[up[0],up[1],up[2],up[3],up[2]+12>84?up[1]:up[2]+12,up[3],up[2],up[1]];
+  const first=Math.ceil((at+PULSE*0.5)/PULSE)*PULSE, end=climax?at+Math.min(dur,4.2):at+dur-0.05;
+  for(let t=first,k=0;t<end;t+=PULSE,k++){
+    const fade=climax?Math.max(0.15,1-(t-at)/4.2):1;
+    const vel=(k%4===0?0.06:0.042)*fade*(0.9+Math.random()*0.2);
+    pianoNote(pat[k%pat.length],t+Math.random()*0.012,vel,2.6,k%2?0.3:-0.3);
+  }
+}
+function strike(notes,climax,at,dur){
   if(!pianoBus || SOUNDS[soundMode].piano===0) return;
   const t0=(at!==undefined?at:actx.currentTime)+0.02;
+  if(dur!==undefined) arpeggiate(notes,climax,t0,dur);
   notes.forEach((m,i)=>{
-    const t=t0+i*(climax?0.11:0.045), f=mtof(m), dur=climax?7:4.2, vel=(i===0?0.16:0.09)*(climax?0.8:1);
+    const t=t0+i*(climax?0.11:0.045), f=mtof(m), dur=climax?7:4.2, vel=(i===0?0.15:0.07)*(climax?0.85:1);
     const g=actx.createGain(); g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vel,t+0.02); g.gain.exponentialRampToValueAtTime(vel*0.35,t+0.5); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
     const tone=actx.createBiquadFilter(); tone.type='lowpass'; tone.frequency.setValueAtTime(2200,t); tone.frequency.exponentialRampToValueAtTime(700,t+1.5);
     [['triangle',1,1],['sine',2,0.18],['sine',1,0.5]].forEach(([type,mul,amp])=>{
@@ -560,7 +590,7 @@ function strike(notes,climax,at){
     tone.connect(g); g.connect(pianoBus);
   });
 }
-function glideTo(notes,climax,at){
+function glideTo(notes,climax,at,chordDur){
   if(!actx) return;
   const off=at!==undefined, now=off?at:actx.currentTime, S=SOUNDS[soundMode];
   lpNode.frequency.setTargetAtTime(climax?S.lp*0.8:S.lp,now,0.8);
@@ -570,7 +600,8 @@ function glideTo(notes,climax,at){
     if(climax){ v.vg.gain.linearRampToValueAtTime(v.base*0.7,now+0.3); v.vg.gain.linearRampToValueAtTime(v.base*0.9,now+1.8); v.vg.gain.linearRampToValueAtTime(v.base*0.4,now+6.5); }
     else { v.vg.gain.linearRampToValueAtTime(v.base*0.75,now+0.2); v.vg.gain.linearRampToValueAtTime(v.base,now+1.0); }
   });
-  strike(notes,climax,at);
+  if(subVoice) subVoice.o.frequency.setTargetAtTime(mtof(notes[0]-12),now,0.3);
+  strike(notes,climax,at,chordDur);
 }
 document.getElementById('play').addEventListener('click',async e=>{
   if(!actx) initAudio();
@@ -844,7 +875,11 @@ else {
     voices=[]; curChord=SEQ[0];
     initAudio(new OfflineAudioContext(2,Math.ceil(sr*dur),sr));
     master.gain.setValueAtTime(0,0); master.gain.linearRampToValueAtTime(0.85,0.03);
-    SEQ.forEach(c=>glideTo(c.notes,c.climax,c.start));
+    SEQ.forEach(c=>glideTo(c.notes,c.climax,c.start,c.dur));
+    const ci=SEQ.findIndex(c=>c.climax);            /* montée douce vers la résolution, puis on se pose */
+    if(ci>0){ const pen=SEQ[ci-1], cl=SEQ[ci];
+      master.gain.setValueAtTime(0.85,pen.start); master.gain.linearRampToValueAtTime(1.0,cl.start);
+      master.gain.linearRampToValueAtTime(0.9,cl.start+2.5); }
     addAmbience(AMB[themeIdx],dur);
     const buf=await actx.startRendering();
     const L=buf.getChannelData(0), Rr=buf.getChannelData(1); let peak=1e-6;
