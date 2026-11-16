@@ -187,11 +187,11 @@ function drawGirl(x,y,f){ ctx.drawImage(FRAMES[f].img,x,y); }
 /* ---------- Générateur de progressions à intention ---------- */
 const QUAL={
   maj:{iv:[0,4,7],s:'',need:[4]}, min:{iv:[0,3,7],s:'m',need:[3]},
-  maj7:{iv:[0,4,7,11],s:'maj7',need:[4,11]}, maj9:{iv:[0,4,7,11,14],s:'maj9',need:[4,11]},
+  maj7:{iv:[0,4,7,11],s:'maj7',need:[4,11]}, maj9:{iv:[0,4,7,11,14],s:'maj9',need:[4,11,2]},
   add9:{iv:[0,4,7,14],s:'add9',need:[4,2]}, madd9:{iv:[0,3,7,14],s:'m(add9)',need:[3,2]},
-  m7:{iv:[0,3,7,10],s:'m7',need:[3,10]}, m9:{iv:[0,3,7,10,14],s:'m9',need:[3,10]},
+  m7:{iv:[0,3,7,10],s:'m7',need:[3,10]}, m9:{iv:[0,3,7,10,14],s:'m9',need:[3,10,2]},
   m6:{iv:[0,3,7,9],s:'m6',need:[3,9]}, hd:{iv:[0,3,6,10],s:'m7♭5',need:[3,6,10]},
-  dom7:{iv:[0,4,7,10],s:'7',need:[4,10]}, dom9:{iv:[0,4,7,10,14],s:'9',need:[4,10]},
+  dom7:{iv:[0,4,7,10],s:'7',need:[4,10]}, dom9:{iv:[0,4,7,10,14],s:'9',need:[4,10,2]},
   sus7:{iv:[0,5,7,10],s:'7sus4',need:[5,10]}, sus4:{iv:[0,5,7],s:'sus4',need:[5]}
 };
 /* Degrés fonctionnels. r = fondamentale, bass = basse (demi-tons depuis la tonique), f = fonction */
@@ -365,7 +365,11 @@ function realize(mode,toks){
   const tonic=pick(mode==='maj'?[0,2,5,7]:[9,2,4]);
   SPELL=(mode==='maj'?[2,7]:[4]).includes(tonic)?SH:FL;
   keyLabel=SPELL[tonic]+(mode==='maj'?' majeur':' mineur');
-  const specs=toks.map(t=>specOf(mode,t));
+  /* couleur : les triades simples deviennent des accords enrichis (7e, 9e), même fonction */
+  const COLOR={maj:sp=>sp.f===2?pick(['dom9','add9']):sp.r===0?pick(['maj9','add9']):pick(['maj7','maj9']),
+               min:sp=>sp.r===5&&mode==='maj'?'m6':sp.r===0?pick(['m9','madd9']):pick(['m9','m7']),
+               dom7:()=>'dom9', sus4:()=>'sus7'};
+  const specs=toks.map(t=>{ const sp=Object.assign({},specOf(mode,t)); if(COLOR[sp.q]) sp.q=COLOR[sp.q](sp); return sp; });
   const BASE=2.15+Math.random()*0.35, all=specs.length<=6?specs.concat(specs.slice(1)):specs; /* deux passages ; le I final du 1er sert de I initial du 2e */
   let prev=null, prevSpec=null, t=0; const seq=[];
   all.forEach((sp,i)=>{
@@ -497,7 +501,7 @@ function impulse(sec){
    coton  : nappe de sinus + triangle, attaque lente, léger chorus, très filtrée
    feutre : piano feutré (notes frappées doucement, égrenées de la basse vers l'aigu, extinction naturelle)
    duo    : piano feutré posé sur une nappe coton discrète */
-const SOUNDS={coton:{label:'Coton',pad:1,piano:0,lp:950}, feutre:{label:'Piano feutré',pad:0,piano:1,lp:1500}, duo:{label:'Coton + piano',pad:0.55,piano:0.8,lp:1200}};
+const SOUNDS={coton:{label:'Coton',pad:1,piano:0,lp:950}, feutre:{label:'Piano feutré',pad:0,piano:1,lp:1500}, duo:{label:'Coton + piano',pad:0.8,piano:0.3,lp:1700}};
 let soundMode='duo', padBus=null, pianoBus=null;
 function addAmbience(kind,dur){
   if(!kind) return;
@@ -531,13 +535,14 @@ function initAudio(ctxOverride){
   const br=actx.createOscillator(), brg=actx.createGain(); br.frequency.value=0.19; brg.gain.value=SOUNDS[soundMode].pad*0.12; br.connect(brg); brg.connect(padBus.gain); br.start();
   pianoBus=actx.createGain(); pianoBus.gain.value=SOUNDS[soundMode].piano; pianoBus.connect(master);
   (curChord||SEQ[0]).notes.forEach((m,i)=>{
-    const vg=actx.createGain(); vg.gain.value=i===0?0.12:0.05;
+    const vg=actx.createGain(); vg.gain.value=i===0?0.10:0.06;
     const pan=actx.createStereoPanner?actx.createStereoPanner():null;
     if(pan){ pan.pan.value=[0,-0.35,0.35,-0.2,0.2][i]||0; vg.connect(pan); pan.connect(padBus); } else vg.connect(padBus);
     const oscs=[];
-    [['sine',0],['triangle',5]].forEach(([type,det],k)=>{
+    const vf=actx.createBiquadFilter(); vf.type='lowpass'; vf.frequency.value=i===0?700:1500; vf.Q.value=0.6; vf.connect(vg);
+    [['sawtooth',-8,0.32],['sawtooth',8,0.32],['triangle',0,0.6]].forEach(([type,det,amp],k)=>{
       const o=actx.createOscillator(); o.type=type; o.detune.value=det; o.frequency.value=mtof(m);
-      const g=actx.createGain(); g.gain.value=k===0?0.75:0.35; o.connect(g); g.connect(vg);
+      const g=actx.createGain(); g.gain.value=amp; o.connect(g); g.connect(vf);
       /* chorus lent : chaque voix ondule à sa propre vitesse */
       const lfo=actx.createOscillator(), lg=actx.createGain(); lfo.frequency.value=0.13+i*0.04+k*0.05; lg.gain.value=5; lfo.connect(lg); lg.connect(o.detune); lfo.start();
       o.start(); oscs.push(o);
@@ -578,7 +583,7 @@ function arpeggiate(notes,climax,at,dur){
 function strike(notes,climax,at,dur){
   if(!pianoBus || SOUNDS[soundMode].piano===0) return;
   const t0=(at!==undefined?at:actx.currentTime)+0.02;
-  if(dur!==undefined) arpeggiate(notes,climax,t0,dur);
+
   notes.forEach((m,i)=>{
     const t=t0+i*(climax?0.11:0.045), f=mtof(m), dur=climax?7:4.2, vel=(i===0?0.15:0.07)*(climax?0.85:1);
     const g=actx.createGain(); g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vel,t+0.02); g.gain.exponentialRampToValueAtTime(vel*0.35,t+0.5); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
@@ -598,7 +603,7 @@ function glideTo(notes,climax,at,chordDur){
     v.oscs.forEach(o=>{ if(!off) o.frequency.cancelScheduledValues(now); o.frequency.setTargetAtTime(mtof(notes[i]),now,0.25);});
     if(!off){ v.vg.gain.cancelScheduledValues(now); v.vg.gain.setValueAtTime(v.vg.gain.value,now); }
     if(climax){ v.vg.gain.linearRampToValueAtTime(v.base*0.7,now+0.3); v.vg.gain.linearRampToValueAtTime(v.base*0.9,now+1.8); v.vg.gain.linearRampToValueAtTime(v.base*0.4,now+6.5); }
-    else { v.vg.gain.linearRampToValueAtTime(v.base*0.75,now+0.2); v.vg.gain.linearRampToValueAtTime(v.base,now+1.0); }
+    else { const st=i*0.14; v.vg.gain.linearRampToValueAtTime(v.base*0.5,now+0.15); v.vg.gain.setValueAtTime(v.base*0.5,now+0.15+st); v.vg.gain.linearRampToValueAtTime(v.base,now+0.8+st); }
   });
   if(subVoice) subVoice.o.frequency.setTargetAtTime(mtof(notes[0]-12),now,0.3);
   strike(notes,climax,at,chordDur);
