@@ -40,7 +40,7 @@ console.log(`▶ ${seed} · ${meta.key} · ${meta.chords.map(c => c.name).join('
 const wav = path.join(OUT, 'video.wav'), mp4 = path.join(OUT, 'video.mp4');
 await writeFile(wav, Buffer.from(await page.evaluate('window.__renderAudio()'), 'base64'));
 
-const total = Math.ceil((meta.duration + 1.5) * FPS);
+const total = Math.round(meta.duration * FPS);   // no tail: the end loops straight back into the start
 const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error',
   '-f', 'image2pipe', '-framerate', String(FPS), '-i', '-', '-i', wav,
   '-c:v', 'libx264', '-preset', 'slow', '-crf', '26', '-maxrate', '600k', '-bufsize', '1200k', '-pix_fmt', 'yuv420p',

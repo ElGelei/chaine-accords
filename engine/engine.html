@@ -26,6 +26,8 @@ body{margin:0; min-height:100%; background:var(--bg); color:var(--fg); font-fami
 .title .root{font-size:11cqh; font-weight:600; letter-spacing:-0.03em; line-height:1}
 .title .qual{font-size:5.2cqh; font-weight:600; letter-spacing:-0.01em}
 .title.swap{opacity:.15}
+.hook{position:absolute; left:50%; transform:translateX(-50%); top:86%; max-width:84%; width:max-content; padding:0.6em 1em; border-radius:999px; background:rgba(12,9,22,.5); text-align:center; font-family:Inter, system-ui, sans-serif; font-weight:600; font-size:3.3cqh;
+  line-height:1.25; color:#fffaf2; text-shadow:0 2px 0 rgba(0,0,0,.45), 0 0 18px rgba(0,0,0,.55); opacity:0; pointer-events:none}
 .cad{position:absolute; left:0; right:0; top:17.5%; text-align:center; font-family:Inter, system-ui, sans-serif; font-weight:600; font-size:2.6cqh;
   letter-spacing:.08em; text-transform:uppercase; color:#ffd88a; text-shadow:0 0 14px rgba(255,200,120,.5); opacity:0; transition:opacity .5s; pointer-events:none}
 .cad.on{opacity:1}
@@ -51,6 +53,7 @@ html.render .controls, html.render .emos, html.render .info, html.render .prog{d
   <canvas id="o" aria-hidden="true"></canvas>
   <div class="title" id="title" aria-live="polite"><span class="root" id="root">D♭</span><span class="qual" id="qual">maj9</span></div>
   <div class="cad" id="cad"></div>
+  <div class="hook" id="hook"></div>
 </div>
 <div class="controls">
   <button class="primary" id="play">▶ Activer le son</button>
@@ -505,7 +508,7 @@ function addAmbience(kind,dur){
   const f=actx.createBiquadFilter(), g=actx.createGain(), out=actx.createGain();
   src.connect(f); f.connect(g); g.connect(out); out.connect(actx.destination);
   const lvl={rain:0.05,waves:0.11,wind:0.07,breeze:0.045,crickets:0}[kind]||0.05;
-  out.gain.setValueAtTime(0,0); out.gain.linearRampToValueAtTime(1,2.5); out.gain.setValueAtTime(1,dur-2); out.gain.linearRampToValueAtTime(0,dur);
+  out.gain.setValueAtTime(1,0);
   if(kind==='rain'){ f.type='bandpass'; f.frequency.value=2500; f.Q.value=0.5; g.gain.value=lvl; }
   else if(kind==='waves'){ f.type='lowpass'; f.frequency.value=600; for(let t=0;t<dur;t+=7){ g.gain.setValueAtTime(lvl*0.25,t); g.gain.linearRampToValueAtTime(lvl,t+3); g.gain.linearRampToValueAtTime(lvl*0.25,t+7); } }
   else { f.type='bandpass'; f.Q.value=0.7; for(let t=0;t<dur;t+=6){ f.frequency.setValueAtTime(350,t); f.frequency.linearRampToValueAtTime(700,t+3); f.frequency.linearRampToValueAtTime(350,t+6); } g.gain.value=lvl; }
@@ -774,8 +777,13 @@ function loop(now){
   const dt=Math.min((now-last)/1000,0.05); last=now; step(dt);
   requestAnimationFrame(loop);
 }
+const HOOKS=['close your eyes for 30 seconds','this one feels like coming home','wait for the last chord…','breathe in… and let it resolve',
+  'a quiet minute, just for you','the softest chord progression','for when your mind is too loud','this progression just feels warm'];
+let hookText='';
 function step(dt){
   tAll+=dt;
+  if(RENDER && hookText){ const t=tAll-songStart, el=document.getElementById('hook');
+    el.style.opacity = t<0.25 ? t/0.25 : t<2.6 ? 1 : t<3.3 ? 1-(t-2.6)/0.7 : 0; }
   scroll+=14*dt;
   const idx=idxAt(tAll-songStart); if(idx!==lastIdx){ lastIdx=idx; triggerChord(chordG(idx)); }
   hopT+=dt; glowT+=dt;
@@ -828,14 +836,14 @@ else {
   let opool=OUTFITS.map((_,i)=>i).filter(i=>!avoidO.includes(i)); if(!opool.length) opool=OUTFITS.map((_,i)=>i);
   setOutfit(QS.has('outfit')?+QS.get('outfit'):pick(opool));
   window.__frame=dt=>step(dt);
-  window.__meta={duration:TOTAL, key:keyLabel, mode, spice:spiceUsed?SPICE_LABEL[spiceUsed]:'', theme:THEMES[themeIdx].name, themeIdx, outfit:outfitIdx, outfitName:OUTFITS[outfitIdx].name, ambience:AMB[themeIdx],
+  hookText=QS.get('hook')||pick(HOOKS);
+  window.__meta={hook:hookText, duration:TOTAL, key:keyLabel, mode, spice:spiceUsed?SPICE_LABEL[spiceUsed]:'', theme:THEMES[themeIdx].name, themeIdx, outfit:outfitIdx, outfitName:OUTFITS[outfitIdx].name, ambience:AMB[themeIdx],
     chords:SEQ.map(c=>({name:c.name, degree:c.ro, start:+c.start.toFixed(3), dur:+c.dur.toFixed(3)}))};
   window.__renderAudio=async()=>{
-    const sr=44100, dur=TOTAL+1.5;
+    const sr=44100, dur=TOTAL;
     voices=[]; curChord=SEQ[0];
     initAudio(new OfflineAudioContext(2,Math.ceil(sr*dur),sr));
-    master.gain.setValueAtTime(0,0); master.gain.linearRampToValueAtTime(0.85,1.2);
-    master.gain.setValueAtTime(0.85,dur-1.6); master.gain.linearRampToValueAtTime(0,dur);
+    master.gain.setValueAtTime(0,0); master.gain.linearRampToValueAtTime(0.85,0.03);
     SEQ.forEach(c=>glideTo(c.notes,c.climax,c.start));
     addAmbience(AMB[themeIdx],dur);
     const buf=await actx.startRendering();
@@ -849,7 +857,7 @@ else {
     const bytes=new Uint8Array(out.buffer); let bin=''; for(let i=0;i<bytes.length;i+=0x8000) bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+0x8000));
     return btoa(bin);
   };
-  (document.fonts?document.fonts.ready:Promise.resolve()).then(()=>{ step(0.001); window.__ready=true; });
+  (document.fonts?document.fonts.ready:Promise.resolve()).then(()=>{ document.getElementById('hook').textContent=hookText; step(0.001); window.__ready=true; });
 }
 })();
 </script>
