@@ -597,7 +597,7 @@ function strike(notes,climax,at,dur){
 }
 /* Les voix glissent vers leurs nouvelles notes l'une après l'autre (basse d'abord, puis du grave
    vers l'aigu) : on entend l'harmonie se transformer couche par couche. Les notes communes restent. */
-const STAG=[-0.2,0.05,0.35,0.65,0.95], GL=0.75;
+const STAG=[-0.1,-0.1,-0.1,-0.1,-0.1], GL=0.6;   // toutes les voix glissent ensemble
 function glideTo(notes,climax,at,chordDur,prev){
   if(!actx) return;
   const off=at!==undefined, now=off?at:actx.currentTime, S=SOUNDS[soundMode];
